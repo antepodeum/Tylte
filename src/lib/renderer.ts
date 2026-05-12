@@ -1,6 +1,7 @@
 import type { TypstInputMode, TypstMode, TypstResolvedRendererOptions } from './config';
 import { createTypstDocument } from './document';
 import { hashCacheKey } from './hash';
+import { stripSvgScripts } from './svg';
 
 export interface TypstRenderRequest extends TypstResolvedRendererOptions {
   source: string;
@@ -28,9 +29,13 @@ const MAX_CACHE_SIZE = 300;
 
 export { createTypstDocument } from './document';
 
+export function createTypstRenderKey(options: TypstRenderRequest): string {
+  return hashCacheKey(createTypstDocument(options));
+}
+
 export async function renderTypstSvg(options: TypstRenderRequest): Promise<string> {
+  const cacheKey = createTypstRenderKey(options);
   const mainContent = createTypstDocument(options);
-  const cacheKey = hashCacheKey(mainContent);
 
   const compile = async () => {
     const typst = await getTypst();
@@ -44,7 +49,9 @@ export async function renderTypstSvg(options: TypstRenderRequest): Promise<strin
   }
 
   const rawSvg = await rawSvgPromise;
-  return options.sanitize ? options.sanitize(rawSvg) : rawSvg;
+  const safeSvg = stripSvgScripts(rawSvg);
+
+  return options.sanitize ? options.sanitize(safeSvg) : safeSvg;
 }
 
 export async function renderTypstSvgResult(

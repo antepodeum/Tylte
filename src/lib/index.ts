@@ -11,11 +11,13 @@ export {
 export {
   clearTypstSvgCache,
   createTypstDocument,
+  createTypstRenderKey,
   renderTypstSvg,
   renderTypstSvgResult
 } from './renderer';
 
 export { hashCacheKey } from './hash';
+export { stripSvgScripts } from './svg';
 
 export type {
   TypstInputMode,

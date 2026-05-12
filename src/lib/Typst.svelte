@@ -5,7 +5,7 @@
     type TypstMode,
     type TypstSvgSanitizer
   } from './config';
-  import { renderTypstSvgResult } from './renderer';
+  import { createTypstRenderKey, renderTypstSvgResult, type TypstRenderResult } from './renderer';
 
   interface Props {
     source?: string;
@@ -23,6 +23,8 @@
     class?: string;
   }
 
+  const isBrowser = typeof window !== 'undefined';
+
   let {
     source = '',
     mode = 'inline',
@@ -39,6 +41,23 @@
     class: className = ''
   }: Props = $props();
 
+  const initialRequest = createRequest(
+    source,
+    mode,
+    inputMode,
+    preamble,
+    textSize,
+    pageMargin,
+    cache,
+    sanitize
+  );
+  const initialKey = initialRequest ? createTypstRenderKey(initialRequest) : '';
+  const hydratedResult = isBrowser && initialKey ? readHydratedResult(initialKey) : null;
+
+  let clientResult = $state<TypstRenderResult | null>(hydratedResult);
+  let clientKey = $state<string | null>(hydratedResult ? initialKey : null);
+  let renderGeneration = 0;
+
   const trimmedSource = $derived(source.trim());
   const tag = $derived(mode === 'inline' ? 'span' : 'div');
   const resolvedOptions = $derived(
@@ -50,20 +69,96 @@
       sanitize
     })
   );
+  const request = $derived(
+    trimmedSource
+      ? {
+          ...resolvedOptions,
+          source: trimmedSource,
+          mode,
+          inputMode
+        }
+      : null
+  );
+  const renderKey = $derived(request ? createTypstRenderKey(request) : '');
+  const emptyResult = $derived({ svg: '', error: '', ssrFailed: false });
+
+  const serverResult = $derived(
+    !isBrowser && request
+      ? await renderTypstSvgResult(request, throwOnError)
+      : null
+  );
 
   const result = $derived(
-    trimmedSource
-      ? await renderTypstSvgResult(
-          {
-            ...resolvedOptions,
-            source: trimmedSource,
-            mode,
-            inputMode
-          },
-          throwOnError
-        )
-      : { svg: '', error: '', ssrFailed: false }
+    isBrowser ? (clientResult ?? emptyResult) : (serverResult ?? emptyResult)
   );
+
+  $effect(() => {
+    if (!isBrowser || !request) {
+      return;
+    }
+
+    const key = renderKey;
+
+    // During hydration, keep the SSR SVG that is already in the DOM.
+    // This prevents loading typst.ts + the large WASM chunks until the first real change.
+    if (clientKey === key && clientResult) {
+      return;
+    }
+
+    const generation = ++renderGeneration;
+    clientKey = key;
+
+    void renderTypstSvgResult(request, throwOnError).then((nextResult) => {
+      if (generation === renderGeneration) {
+        clientResult = nextResult;
+      }
+    });
+  });
+
+  function createRequest(
+    rawSource: string,
+    rawMode: TypstMode,
+    rawInputMode: TypstInputMode,
+    rawPreamble: string | undefined,
+    rawTextSize: string | undefined,
+    rawPageMargin: string | undefined,
+    rawCache: boolean | undefined,
+    rawSanitize: TypstSvgSanitizer | undefined
+  ) {
+    const normalizedSource = rawSource.trim();
+
+    if (!normalizedSource) {
+      return null;
+    }
+
+    return {
+      ...resolveTypstOptions({
+        preamble: rawPreamble,
+        textSize: rawTextSize,
+        pageMargin: rawPageMargin,
+        cache: rawCache,
+        sanitize: rawSanitize
+      }),
+      source: normalizedSource,
+      mode: rawMode,
+      inputMode: rawInputMode
+    };
+  }
+
+  function readHydratedResult(key: string): TypstRenderResult | null {
+    const element = document.querySelector<HTMLElement>(`[data-tylte-key="${key}"]`);
+    const svg = element?.querySelector('svg')?.outerHTML ?? '';
+
+    if (!svg) {
+      return null;
+    }
+
+    return {
+      svg,
+      error: '',
+      ssrFailed: false
+    };
+  }
 </script>
 
 <svelte:element
@@ -72,6 +167,7 @@
   role={ariaLabel ? 'img' : undefined}
   aria-label={ariaLabel}
   title={title}
+  data-tylte-key={renderKey || undefined}
   data-error={result.error || undefined}
   data-ssr-failed={result.ssrFailed ? 'true' : undefined}
 >

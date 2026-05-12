@@ -1,6 +1,7 @@
 export {
   clearTypstSvgCache,
   createTypstDocument,
+  createTypstRenderKey,
   renderTypstSvg as renderTypstSvgServer,
   renderTypstSvgResult as renderTypstSvgServerResult
 } from './renderer';
