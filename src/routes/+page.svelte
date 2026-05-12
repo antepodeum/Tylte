@@ -201,7 +201,6 @@
     resize: vertical;
   }
 
-  code,
   pre {
     font-family:
       ui-monospace,
