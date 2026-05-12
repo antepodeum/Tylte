@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createTypstMdsvexPreprocessor, transformTylteMarkdown } from './markdown.ts';
+import { createTypstMdsvexPreprocessor, transformTypleteMarkdown } from './markdown.ts';
 
-describe('transformTylteMarkdown component output', () => {
-	it('renders namespaced Tylte fences as raw Typst blocks', async () => {
-		const output = await transformTylteMarkdown(
+describe('transformTypleteMarkdown component output', () => {
+	it('renders namespaced Typlete fences as raw Typst blocks', async () => {
+		const output = await transformTypleteMarkdown(
 			[
 				'Before',
 				'',
-				'```tylte-typst',
+				'```typlete-typst',
 				'#set text(size: 12pt)',
 				'#rect[hello]',
 				'```',
@@ -30,8 +30,8 @@ describe('transformTylteMarkdown component output', () => {
 		);
 	});
 
-	it('renders namespaced Tylte math fences as math blocks', async () => {
-		const output = await transformTylteMarkdown('```tylte-math\nalpha + beta\n```', {
+	it('renders namespaced Typlete math fences as math blocks', async () => {
+		const output = await transformTypleteMarkdown('```typlete-math\nalpha + beta\n```', {
 			output: 'component'
 		});
 
@@ -40,14 +40,14 @@ describe('transformTylteMarkdown component output', () => {
 
 	it('preserves normal Typst source fences and old moustache text', async () => {
 		const input = [
-			'{{this is not Tylte syntax anymore}}',
+			'{{this is not Typlete syntax anymore}}',
 			'',
 			'```typst',
 			'#rect[plain Typst source code]',
 			'```',
 			'',
 			'````md',
-			'```tylte-typst',
+			'```typlete-typst',
 			'#rect[in rendered example source]',
 			'```',
 			'````',
@@ -57,19 +57,19 @@ describe('transformTylteMarkdown component output', () => {
 			'```'
 		].join('\n');
 
-		const output = await transformTylteMarkdown(input, { output: 'component' });
+		const output = await transformTypleteMarkdown(input, { output: 'component' });
 
 		assert.equal(output, input);
 	});
 
 	it('supports long fences and tilde fences', async () => {
-		const output = await transformTylteMarkdown(
+		const output = await transformTypleteMarkdown(
 			[
-				'~~~~tylte-raw',
+				'~~~~typlete-raw',
 				'#rect[hello]',
 				'~~~~',
 				'',
-				'````tylte-typst-math',
+				'````typlete-typst-math',
 				'sum_(i=1)^n i',
 				'````'
 			].join('\n'),
@@ -91,11 +91,11 @@ describe('createTypstMdsvexPreprocessor', () => {
 	it('injects imports for generated default components', async () => {
 		const preprocessor = createTypstMdsvexPreprocessor();
 		const { code } = await preprocessor.markup({
-			content: '```tylte-typst\n#rect[hello]\n```',
+			content: '```typlete-typst\n#rect[hello]\n```',
 			filename: 'page.svx'
 		});
 
-		assert.match(code, /import \{ TypstInline, TypstBlock \} from "tylte";/);
+		assert.match(code, /import \{ TypstInline, TypstBlock \} from "typlete";/);
 		assert.match(code, /<TypstBlock source=\{"#rect\[hello\]"\} inputMode="raw" \/>/);
 	});
 
@@ -105,11 +105,11 @@ describe('createTypstMdsvexPreprocessor', () => {
 			componentBlockName: 'TBlock'
 		});
 		const { code } = await preprocessor.markup({
-			content: '```tylte math\nalpha\n```',
+			content: '```typlete math\nalpha\n```',
 			filename: 'page.svx'
 		});
 
-		assert.match(code, /import \{ TypstInline as TInline, TypstBlock as TBlock \} from "tylte";/);
+		assert.match(code, /import \{ TypstInline as TInline, TypstBlock as TBlock \} from "typlete";/);
 		assert.match(code, /<TBlock source=\{"alpha"\} \/>/);
 	});
 
@@ -117,15 +117,15 @@ describe('createTypstMdsvexPreprocessor', () => {
 		const preprocessor = createTypstMdsvexPreprocessor();
 		const content = [
 			'<script lang="ts">',
-			'\timport { TypstBlock, TypstInline } from "tylte";',
+			'\timport { TypstBlock, TypstInline } from "typlete";',
 			'</script>',
 			'',
-			'```tylte-typst',
+			'```typlete-typst',
 			'#rect[hello]',
 			'```'
 		].join('\n');
 		const { code } = await preprocessor.markup({ content, filename: 'page.svx' });
 
-		assert.equal(code.match(/from "tylte"/g)?.length, 1);
+		assert.equal(code.match(/from "typlete"/g)?.length, 1);
 	});
 });

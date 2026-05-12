@@ -1,5 +1,5 @@
 {
-	"name": "tylte",
+	"name": "typlete",
 	"version": "0.2.2",
 	"scripts": {
 		"dev": "vite dev",

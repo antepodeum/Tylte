@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>Tylte demo</title>
+	<title>Typlete demo</title>
 	<meta
 		name="description"
 		content="Svelte 5 components for rendering Typst inline, block and raw Typst as SVG."
@@ -17,7 +17,7 @@
 
 <main class="page">
 	<section class="hero">
-		<p class="eyebrow">Tylte</p>
+		<p class="eyebrow">Typlete</p>
 		<h1>Svelte 5 components for Typst formulas</h1>
 		<p class="lead">
 			Render Typst math and raw Typst as SVG. Components try SSR first and keep working

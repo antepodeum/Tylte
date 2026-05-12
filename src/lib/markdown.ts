@@ -3,10 +3,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { renderTypstSvgServer } from './server.ts';
 
-export type TylteMarkdownOutput = 'component' | 'html' | 'markdown-image' | 'asset';
+export type TypleteMarkdownOutput = 'component' | 'html' | 'markdown-image' | 'asset';
 
-export interface TransformTylteMarkdownOptions {
-	output?: TylteMarkdownOutput;
+export interface TransformTypleteMarkdownOptions {
+	output?: TypleteMarkdownOutput;
 	assetDir?: string;
 	assetBaseUrl?: string;
 	componentInlineName?: string;
@@ -18,7 +18,7 @@ export interface TransformTylteMarkdownOptions {
 	cache?: boolean;
 }
 
-export interface CreateTypstMdsvexPreprocessorOptions extends TransformTylteMarkdownOptions {
+export interface CreateTypstMdsvexPreprocessorOptions extends TransformTypleteMarkdownOptions {
 	/**
 	 * Injects an instance-level Svelte import for the generated component tags.
 	 * Set this to false when components are already imported by another MDsveX hook.
@@ -27,13 +27,13 @@ export interface CreateTypstMdsvexPreprocessorOptions extends TransformTylteMark
 	componentImportSource?: string;
 }
 
-export interface TylteMarkdownToken {
+export interface TypleteMarkdownToken {
 	source: string;
 	mode: 'inline' | 'block';
 	inputMode: 'math' | 'raw';
 }
 
-export interface TylteMdsvexPreprocessor {
+export interface TypleteMdsvexPreprocessor {
 	name: string;
 	markup(input: { content: string; filename?: string }): Promise<{ code: string }>;
 }
@@ -48,9 +48,9 @@ interface MarkdownFence {
 
 const MARKDOWN_EXTENSION_RE = /\.(md|svx|mdx)$/i;
 
-export async function transformTylteMarkdown(
+export async function transformTypleteMarkdown(
 	markdown: string,
-	options: TransformTylteMarkdownOptions = {}
+	options: TransformTypleteMarkdownOptions = {}
 ): Promise<string> {
 	const output = options.output ?? 'component';
 	const fences = collectFencedCodeBlocks(markdown);
@@ -95,20 +95,20 @@ export async function transformTylteMarkdown(
 	return result;
 }
 
-export const preRenderTypstMarkdown = transformTylteMarkdown;
+export const preRenderTypstMarkdown = transformTypleteMarkdown;
 
 export function createTypstMdsvexPreprocessor(
 	options: CreateTypstMdsvexPreprocessorOptions = {}
-): TylteMdsvexPreprocessor {
+): TypleteMdsvexPreprocessor {
 	return {
-		name: 'tylte-mdsvex',
+		name: 'typlete-mdsvex',
 		async markup({ content, filename }) {
 			if (filename && !MARKDOWN_EXTENSION_RE.test(filename)) {
 				return { code: content };
 			}
 
 			const output = options.output ?? 'component';
-			let code = await transformTylteMarkdown(content, {
+			let code = await transformTypleteMarkdown(content, {
 				...options,
 				output
 			});
@@ -130,17 +130,17 @@ function parseTypstFenceInfo(info: string): { inputMode: 'math' | 'raw' } | null
 	const [language, ...rest] = normalized.split(/\s+/);
 	const mode = rest[0] ?? '';
 
-	if (language === 'tylte') {
+	if (language === 'typlete') {
 		if (mode === 'math') return { inputMode: 'math' };
 		if (mode === 'raw' || mode === 'typst' || mode === '') return { inputMode: 'raw' };
 		return null;
 	}
 
-	if (language === 'tylte-math' || language === 'tylte-typst-math') {
+	if (language === 'typlete-math' || language === 'typlete-typst-math') {
 		return { inputMode: 'math' };
 	}
 
-	if (language === 'tylte-raw' || language === 'tylte-typst') {
+	if (language === 'typlete-raw' || language === 'typlete-typst') {
 		return { inputMode: 'raw' };
 	}
 
@@ -148,8 +148,8 @@ function parseTypstFenceInfo(info: string): { inputMode: 'math' | 'raw' } | null
 }
 
 async function renderMarkdownToken(
-	token: TylteMarkdownToken,
-	options: TransformTylteMarkdownOptions & { output: TylteMarkdownOutput }
+	token: TypleteMarkdownToken,
+	options: TransformTypleteMarkdownOptions & { output: TypleteMarkdownOutput }
 ): Promise<string> {
 	if (options.output === 'component') {
 		return renderComponentToken(token, options);
@@ -168,7 +168,7 @@ async function renderMarkdownToken(
 	if (options.output === 'html') {
 		const tag = token.mode === 'inline' ? 'span' : 'div';
 
-		return `<${tag} class="tylte-markdown tylte-markdown-${token.mode}">${svg}</${tag}>`;
+		return `<${tag} class="typlete-markdown typlete-markdown-${token.mode}">${svg}</${tag}>`;
 	}
 
 	if (options.output === 'markdown-image') {
@@ -178,12 +178,12 @@ async function renderMarkdownToken(
 
 	if (options.output === 'asset') {
 		if (!options.assetDir) {
-			throw new Error('transformTylteMarkdown: assetDir is required when output="asset".');
+			throw new Error('transformTypleteMarkdown: assetDir is required when output="asset".');
 		}
 
 		const assetBaseUrl = normalizeAssetBaseUrl(options.assetBaseUrl ?? '');
 		const hash = hashToken(token);
-		const filename = `tylte-${hash}.svg`;
+		const filename = `typlete-${hash}.svg`;
 		const filepath = join(options.assetDir, filename);
 
 		await mkdir(options.assetDir, { recursive: true });
@@ -196,8 +196,8 @@ async function renderMarkdownToken(
 }
 
 function renderComponentToken(
-	token: TylteMarkdownToken,
-	options: TransformTylteMarkdownOptions
+	token: TypleteMarkdownToken,
+	options: TransformTypleteMarkdownOptions
 ): string {
 	const inlineName = options.componentInlineName ?? 'TypstInline';
 	const blockName = options.componentBlockName ?? 'TypstBlock';
@@ -291,13 +291,13 @@ function injectComponentImports(
 ): string {
 	const inlineName = options.componentInlineName ?? 'TypstInline';
 	const blockName = options.componentBlockName ?? 'TypstBlock';
-	const importSource = options.componentImportSource ?? 'tylte';
+	const importSource = options.componentImportSource ?? 'typlete';
 
 	if (!content.includes(`<${inlineName}`) && !content.includes(`<${blockName}`)) {
 		return content;
 	}
 
-	if (hasTylteComponentImports(content, inlineName, blockName, importSource)) {
+	if (hasTypleteComponentImports(content, inlineName, blockName, importSource)) {
 		return content;
 	}
 
@@ -315,7 +315,7 @@ function injectComponentImports(
 	return `<script lang="ts">\n\t${importLine}\n</script>\n\n${content}`;
 }
 
-function hasTylteComponentImports(
+function hasTypleteComponentImports(
 	content: string,
 	inlineName: string,
 	blockName: string,
@@ -373,7 +373,7 @@ function normalizeAssetBaseUrl(assetBaseUrl: string): string {
 	return assetBaseUrl.endsWith('/') ? assetBaseUrl : `${assetBaseUrl}/`;
 }
 
-function hashToken(token: TylteMarkdownToken): string {
+function hashToken(token: TypleteMarkdownToken): string {
 	return createHash('sha256').update(JSON.stringify(token)).digest('hex').slice(0, 16);
 }
 

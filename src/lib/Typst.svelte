@@ -232,7 +232,7 @@
 	}
 
 	function readRetainedServerSvg(element: HTMLElement | null, key: string): string {
-		if (!element || element.dataset.tylteKey !== key) {
+		if (!element || element.dataset.typleteKey !== key) {
 			return '';
 		}
 
@@ -256,7 +256,7 @@
 	role={ariaLabel ? 'img' : undefined}
 	aria-label={ariaLabel}
 	{title}
-	data-tylte-key={renderKey || undefined}
+	data-typlete-key={renderKey || undefined}
 	data-error={error || undefined}
 	data-has-visible-svg={hasVisibleSvg ? 'true' : undefined}
 >

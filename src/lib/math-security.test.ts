@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createTypstDocument, escapeTypstMathSource } from './document.ts';
-import { transformTylteMarkdown } from './markdown.ts';
+import { transformTypleteMarkdown } from './markdown.ts';
 
 const baseOptions = {
 	preamble: '',
@@ -60,9 +60,12 @@ describe('Typst math source escaping', () => {
 	});
 
 	it('allows markdown math fences that contain delimiter-like characters', async () => {
-		const output = await transformTylteMarkdown('```tylte-math\nx$ #image("evil.svg") $y\n```', {
-			output: 'component'
-		});
+		const output = await transformTypleteMarkdown(
+			'```typlete-math\nx$ #image("evil.svg") $y\n```',
+			{
+				output: 'component'
+			}
+		);
 
 		assert.equal(output.trim(), '<TypstBlock source={"x$ #image(\\"evil.svg\\") $y"} />');
 	});
