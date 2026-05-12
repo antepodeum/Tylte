@@ -39,11 +39,11 @@ pnpm add tylte
 <TypstBlock source="sum_(i=1)^n i = (n(n+1)) / 2" />
 ```
 
-`source` is Typst math by default. Do not include `$...$` in math mode.
+`source` is Typst math by default. Tylte wraps math input in Typst math delimiters and escapes delimiter-breaking characters (`$` and `#`) before compiling. Do not include outer `$...$`; pass the formula body.
 
 ## Raw Typst
 
-Use `inputMode="raw"` when `source` is a Typst markup fragment that should not be wrapped as math.
+Use `inputMode="raw"` for full Typst markup fragments that should not be wrapped as math. Raw mode passes the source to Typst unchanged, so user-controlled raw input needs separate policy around allowed Typst features and assets.
 
 ```svelte
 <TypstBlock inputMode="raw" source={'#rect(radius: 6pt, inset: 10pt)[#strong[Raw Typst]]'} />
@@ -131,7 +131,7 @@ Raw Typst render block:
 ```
 ````
 
-Math render block:
+Math render block. The content is treated as a formula body; delimiter-breaking `$` and `#` characters are escaped before Typst compiles it:
 
 ````md
 ```tylte-math
@@ -161,7 +161,7 @@ Typst source code remains source code:
 ```
 ````
 
-For inline formulas in MDsveX, use the Svelte component directly:
+For inline formulas in MDsveX, use the Svelte component directly. The same math escaping applies:
 
 ```md
 The value is <TypstInline source="alpha + beta" />.
@@ -306,7 +306,7 @@ await transformTylteMarkdown(markdown, {
 
 ## Sanitizing SVG
 
-Tylte strips embedded SVG `<script>` tags and common script-like SVG attributes by default. For stricter sanitizing, pass a sanitizer.
+Tylte inserts compiler-produced SVG inline. By default it strips embedded SVG `<script>` tags and common script-like SVG attributes from that output. This is output-level defense-in-depth, not a sandbox for arbitrary raw Typst input or external assets. For stricter SVG sanitizing, pass a sanitizer.
 
 DOMPurify is optional:
 
@@ -328,5 +328,6 @@ const sanitize = await createServerDomPurifySvgSanitizer();
 
 - Component SSR depends on Svelte experimental async rendering.
 - Plain `typst` fences are never render instructions; use `tylte-typst`, `tylte-raw`, or `tylte-math` when Markdown should render Typst.
+- Math mode and `tylte-math` escape `$` and `#` before wrapping the source in Typst math delimiters. Raw mode and `preamble` are passed to Typst unchanged.
 - Server rendering temporarily guards Typst runtime fetches so SvelteKit does not track external runtime fetches during SSR.
 - `html`, `markdown-image`, and `asset` output modes pre-render SVG immediately and are not reactive on the client.

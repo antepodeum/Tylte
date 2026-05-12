@@ -30,7 +30,16 @@ const MAX_CACHE_SIZE = 300;
 export { createTypstDocument } from './document.ts';
 
 export function createTypstRenderKey(options: TypstRenderRequest): string {
-	return hashCacheKey(createTypstDocument(options));
+	return hashCacheKey(
+		JSON.stringify({
+			source: options.source,
+			mode: options.mode,
+			inputMode: options.inputMode,
+			preamble: options.preamble,
+			textSize: options.textSize,
+			pageMargin: options.pageMargin
+		})
+	);
 }
 
 export async function renderTypstSvg(options: TypstRenderRequest): Promise<string> {
