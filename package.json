@@ -46,14 +46,14 @@
 		}
 	},
 	"dependencies": {
-		"@myriaddreamin/typst.ts": "0.7.0-rc2",
 		"@myriaddreamin/typst-ts-renderer": "0.7.0-rc2",
-		"@myriaddreamin/typst-ts-web-compiler": "0.7.0-rc2"
+		"@myriaddreamin/typst-ts-web-compiler": "0.7.0-rc2",
+		"@myriaddreamin/typst.ts": "0.7.0-rc2"
 	},
 	"peerDependencies": {
-		"svelte": "^5.36.0",
 		"dompurify": "^3.0.0",
-		"jsdom": "^27.0.0"
+		"jsdom": "^27.0.0",
+		"svelte": "^5.36.0"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
@@ -62,11 +62,14 @@
 		"@sveltejs/kit": "^2.57.0",
 		"@sveltejs/package": "^2.5.7",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
+		"@types/jsdom": "^28.0.1",
 		"@types/node": "^24",
+		"dompurify": "^3.3.1",
 		"eslint": "^10.2.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.17.0",
 		"globals": "^17.4.0",
+		"jsdom": "^27.0.1",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.5.1",
 		"publint": "^0.3.18",
@@ -74,9 +77,7 @@
 		"svelte-check": "^4.4.6",
 		"typescript": "^6.0.2",
 		"typescript-eslint": "^8.58.1",
-		"vite": "^8.0.7",
-		"dompurify": "^3.3.1",
-		"jsdom": "^27.0.1"
+		"vite": "^8.0.7"
 	},
 	"keywords": [
 		"svelte"
