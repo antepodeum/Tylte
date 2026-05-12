@@ -1,11 +1,11 @@
 # Tylte
 
-Svelte 5 components and Markdown helpers for rendering Typst math or raw Typst markup as SVG.
+Svelte 5 components and Markdown helpers for rendering Typst as SVG.
 
 ## Requirements
 
 - Svelte `>= 5.36`
-- Svelte async rendering enabled with `compilerOptions.experimental.async = true`
+- Svelte async rendering enabled: `compilerOptions.experimental.async = true`
 - Vite/SvelteKit-compatible asset handling for browser WASM imports
 
 ```js
@@ -66,7 +66,6 @@ Use `inputMode="raw"` when `source` is a Typst markup fragment that should not b
 ```ts
 type TypstMode = 'inline' | 'block';
 type TypstInputMode = 'math' | 'raw' | 'markup';
-
 type TypstSvgSanitizer = (svg: string) => string;
 
 source?: string;
@@ -119,42 +118,54 @@ const svg = await renderTypstSvgServer({
 });
 ```
 
-## Markdown shortcodes
+## Markdown blocks
 
-Tylte uses explicit `{{...}}` shortcodes. Typst code fences remain source code and are not rendered.
+Tylte only renders namespaced Tylte fences. Normal `typst` fences stay normal Markdown code blocks, so documentation can show Typst source without triggering rendering.
+
+Raw Typst render block:
+
+````md
+```tylte-typst
+#set text(size: 12pt)
+#rect[hello]
+```
+````
+
+Math render block:
+
+````md
+```tylte-math
+sum_(i=1)^n i = (n(n+1)) / 2
+```
+````
+
+Accepted render fence names:
 
 ```md
-{{math-inline}}
-
-{{ math-block }}
-
-{{~raw-inline~}}
-
-{{~ raw-block ~}}
+tylte -> raw Typst render block
+tylte raw -> raw Typst render block
+tylte typst -> raw Typst render block
+tylte-typst -> raw Typst render block
+tylte-raw -> raw Typst render block
+tylte math -> math render block
+tylte-math -> math render block
+tylte-typst-math -> math render block
 ```
 
-Block shortcodes must be the only non-whitespace content on their Markdown line. A spaced shortcode embedded inside a paragraph is rendered inline to avoid invalid Markdown/HTML nesting.
-
-```md
-The value is {{ alpha + beta }} here.
-
-{{ alpha + beta }}
-```
-
-To write the shortcode literally, escape the opening braces:
-
-```md
-\{{alpha + beta}}
-```
-
-Shortcodes are not processed inside fenced code, indented code, inline code spans, HTML comments, `<script>` blocks, or `<style>` blocks.
+Typst source code remains source code:
 
 ````md
 ```typst
-{{alpha + beta}}
-#rect[in source code]
+#set text(size: 12pt)
+#rect[hello]
 ```
 ````
+
+For inline formulas in MDsveX, use the Svelte component directly:
+
+```md
+The value is <TypstInline source="alpha + beta" />.
+```
 
 ## Markdown transform
 
@@ -185,8 +196,8 @@ await transformTylteMarkdown(markdown, {
 Produces Svelte component tags:
 
 ```svelte
-<TypstInline source={"alpha + beta"} />
-<TypstBlock source={"#rect[hello]"} inputMode="raw" />
+<TypstBlock source={'#rect[hello]'} inputMode="raw" />
+<TypstBlock source={'alpha + beta'} />
 ```
 
 ### HTML output
@@ -229,7 +240,7 @@ This writes SVG files to `assetDir` and inserts normal Markdown image links.
 
 ## MDsveX preprocessor
 
-Run the Tylte preprocessor before MDsveX so Markdown shortcodes are converted to Svelte component tags before MDsveX compiles the document.
+Run the Tylte preprocessor before MDsveX so namespaced Tylte render fences are converted to Svelte component tags before MDsveX compiles the document.
 
 ```js
 // svelte.config.js
@@ -260,7 +271,7 @@ const config = {
 export default config;
 ```
 
-For `output: 'component'`, the preprocessor injects this import when a document contains Tylte shortcodes:
+For `output: 'component'`, the preprocessor injects this import when a document contains a rendered Typst fence:
 
 ```svelte
 <script lang="ts">
@@ -295,7 +306,7 @@ await transformTylteMarkdown(markdown, {
 
 ## Sanitizing SVG
 
-Tylte strips embedded SVG `<script>` tags by default. For stricter sanitizing, pass a sanitizer.
+Tylte strips embedded SVG `<script>` tags and common script-like SVG attributes by default. For stricter sanitizing, pass a sanitizer.
 
 DOMPurify is optional:
 
@@ -316,6 +327,6 @@ const sanitize = await createServerDomPurifySvgSanitizer();
 ## Limitations
 
 - Component SSR depends on Svelte experimental async rendering.
-- Markdown shortcodes intentionally do not reuse the `typst` code-fence language; fences are preserved for syntax highlighting and source examples.
+- Plain `typst` fences are never render instructions; use `tylte-typst`, `tylte-raw`, or `tylte-math` when Markdown should render Typst.
 - Server rendering temporarily guards Typst runtime fetches so SvelteKit does not track external runtime fetches during SSR.
 - `html`, `markdown-image`, and `asset` output modes pre-render SVG immediately and are not reactive on the client.

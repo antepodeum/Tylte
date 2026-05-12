@@ -38,12 +38,14 @@ export interface TylteMdsvexPreprocessor {
 	markup(input: { content: string; filename?: string }): Promise<{ code: string }>;
 }
 
-interface ProtectedRange {
+interface MarkdownFence {
 	start: number;
 	end: number;
+	contentStart: number;
+	contentEnd: number;
+	info: string;
 }
 
-const SHORTCODE_RE = /\\?\{\{(~?)([\s\S]*?)(~?)\}\}/g;
 const MARKDOWN_EXTENSION_RE = /\.(md|svx|mdx)$/i;
 
 export async function transformTylteMarkdown(
@@ -51,24 +53,46 @@ export async function transformTylteMarkdown(
 	options: TransformTylteMarkdownOptions = {}
 ): Promise<string> {
 	const output = options.output ?? 'component';
-	const chunks = splitByProtectedMarkdown(markdown);
-	const rendered: string[] = [];
+	const fences = collectFencedCodeBlocks(markdown);
 
-	for (const chunk of chunks) {
-		if (chunk.kind === 'protected') {
-			rendered.push(chunk.value);
+	if (fences.length === 0) {
+		return markdown;
+	}
+
+	let result = '';
+	let lastIndex = 0;
+
+	for (const fence of fences) {
+		const typstFence = parseTypstFenceInfo(fence.info);
+
+		if (!typstFence) {
 			continue;
 		}
 
-		rendered.push(
-			await transformChunk(chunk.value, {
+		const source = normalizeFenceContent(markdown.slice(fence.contentStart, fence.contentEnd));
+
+		if (!source.trim()) {
+			continue;
+		}
+
+		result += markdown.slice(lastIndex, fence.start);
+		result += await renderMarkdownToken(
+			{
+				source: typstFence.inputMode === 'math' ? source.trim() : source,
+				mode: 'block',
+				inputMode: typstFence.inputMode
+			},
+			{
 				...options,
 				output
-			})
+			}
 		);
+		result += getConsumedClosingLineEnding(markdown, fence.end);
+		lastIndex = fence.end;
 	}
 
-	return rendered.join('');
+	result += markdown.slice(lastIndex);
+	return result;
 }
 
 export const preRenderTypstMarkdown = transformTylteMarkdown;
@@ -98,80 +122,29 @@ export function createTypstMdsvexPreprocessor(
 	};
 }
 
-async function transformChunk(
-	chunk: string,
-	options: Required<Pick<TransformTylteMarkdownOptions, 'output'>> & TransformTylteMarkdownOptions
-): Promise<string> {
-	let result = '';
-	let lastIndex = 0;
+function parseTypstFenceInfo(info: string): { inputMode: 'math' | 'raw' } | null {
+	const normalized = info.trim().toLowerCase();
 
-	for (const match of chunk.matchAll(SHORTCODE_RE)) {
-		const full = match[0];
-		const index = match.index ?? 0;
+	if (!normalized) return null;
 
-		result += chunk.slice(lastIndex, index);
-		lastIndex = index + full.length;
+	const [language, ...rest] = normalized.split(/\s+/);
+	const mode = rest[0] ?? '';
 
-		if (full.startsWith('\\{{')) {
-			result += full.slice(1);
-			continue;
-		}
-
-		const token = parseShortcode({
-			full,
-			openRaw: match[1] ?? '',
-			body: match[2] ?? '',
-			closeRaw: match[3] ?? '',
-			chunk,
-			start: index,
-			end: index + full.length
-		});
-
-		if (!token) {
-			result += full;
-			continue;
-		}
-
-		result += await renderMarkdownToken(token, options);
-	}
-
-	result += chunk.slice(lastIndex);
-	return result;
-}
-
-function parseShortcode(input: {
-	full: string;
-	openRaw: string;
-	body: string;
-	closeRaw: string;
-	chunk: string;
-	start: number;
-	end: number;
-}): TylteMarkdownToken | null {
-	const { openRaw, body, closeRaw, chunk, start, end } = input;
-	const hasRawMarker = openRaw === '~' || closeRaw === '~';
-
-	if (hasRawMarker && !(openRaw === '~' && closeRaw === '~')) {
+	if (language === 'tylte') {
+		if (mode === 'math') return { inputMode: 'math' };
+		if (mode === 'raw' || mode === 'typst' || mode === '') return { inputMode: 'raw' };
 		return null;
 	}
 
-	const source = body.trim();
-
-	if (!source) {
-		return null;
+	if (language === 'tylte-math' || language === 'tylte-typst-math') {
+		return { inputMode: 'math' };
 	}
 
-	const inputMode = hasRawMarker ? 'raw' : 'math';
-	const hasOuterWhitespace = body.length > 0 && /^\s/.test(body) && /\s$/.test(body);
-	const hasNewline = body.includes('\n') || body.includes('\r');
-	const wantsBlock = hasOuterWhitespace || hasNewline;
-	const mode = wantsBlock && isStandaloneMarkdownLine(chunk, start, end) ? 'block' : 'inline';
+	if (language === 'tylte-raw' || language === 'tylte-typst') {
+		return { inputMode: 'raw' };
+	}
 
-	return {
-		source,
-		mode,
-		inputMode
-	};
+	return null;
 }
 
 async function renderMarkdownToken(
@@ -242,172 +215,53 @@ function renderComponentToken(
 	return `<${name} ${attrs.join(' ')} />`;
 }
 
-function splitByProtectedMarkdown(markdown: string): Array<{ kind: 'text' | 'protected'; value: string }> {
-	const ranges = collectProtectedRanges(markdown);
-
-	if (ranges.length === 0) {
-		return [{ kind: 'text', value: markdown }];
-	}
-
-	const chunks: Array<{ kind: 'text' | 'protected'; value: string }> = [];
-	let lastIndex = 0;
-
-	for (const range of ranges) {
-		if (range.start > lastIndex) {
-			chunks.push({ kind: 'text', value: markdown.slice(lastIndex, range.start) });
-		}
-
-		chunks.push({ kind: 'protected', value: markdown.slice(range.start, range.end) });
-		lastIndex = range.end;
-	}
-
-	if (lastIndex < markdown.length) {
-		chunks.push({ kind: 'text', value: markdown.slice(lastIndex) });
-	}
-
-	return chunks;
-}
-
-function collectProtectedRanges(markdown: string): ProtectedRange[] {
-	return mergeRanges([
-		...collectFencedCodeRanges(markdown),
-		...collectIndentedCodeRanges(markdown),
-		...collectHtmlCommentRanges(markdown),
-		...collectSvelteTagRanges(markdown),
-		...collectInlineCodeRanges(markdown)
-	]);
-}
-
-function collectFencedCodeRanges(markdown: string): ProtectedRange[] {
-	const ranges: ProtectedRange[] = [];
+function collectFencedCodeBlocks(markdown: string): MarkdownFence[] {
+	const fences: MarkdownFence[] = [];
 	let index = 0;
 
 	while (index < markdown.length) {
-		const line = readLine(markdown, index);
-		const opening = line.text.match(/^[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*$/);
+		const openingLine = readLine(markdown, index);
+		const opening = openingLine.text.match(/^[ \t]{0,3}(`{3,}|~{3,})([^`~\r\n]*)$/);
 
 		if (!opening) {
-			index = line.end;
+			index = openingLine.end;
 			continue;
 		}
 
 		const start = index;
-		const fence = opening[1];
-		const fenceChar = fence[0];
-		const minFenceLength = fence.length;
-		index = line.end;
+		const marker = opening[1];
+		const info = opening[2]?.trim() ?? '';
+		const markerChar = marker[0];
+		const markerLength = marker.length;
+		const contentStart = openingLine.end;
+
+		index = openingLine.end;
 
 		while (index < markdown.length) {
 			const closingLine = readLine(markdown, index);
 			const closing = closingLine.text.match(/^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/);
 
-			index = closingLine.end;
-
-			if (
-				closing &&
-				closing[1][0] === fenceChar &&
-				closing[1].length >= minFenceLength
-			) {
+			if (closing && closing[1][0] === markerChar && closing[1].length >= markerLength) {
+				fences.push({
+					start,
+					end: closingLine.end,
+					contentStart,
+					contentEnd: index,
+					info
+				});
+				index = closingLine.end;
 				break;
 			}
+
+			index = closingLine.end;
 		}
 
-		ranges.push({ start, end: index });
-	}
-
-	return ranges;
-}
-
-function collectIndentedCodeRanges(markdown: string): ProtectedRange[] {
-	const ranges: ProtectedRange[] = [];
-	let index = 0;
-	let current: ProtectedRange | null = null;
-
-	while (index < markdown.length) {
-		const line = readLine(markdown, index);
-		const isIndentedCode = /^(?: {4}|\t)/.test(line.text);
-
-		if (isIndentedCode) {
-			current ??= { start: index, end: line.end };
-			current.end = line.end;
-		} else if (current) {
-			ranges.push(current);
-			current = null;
-		}
-
-		index = line.end;
-	}
-
-	if (current) {
-		ranges.push(current);
-	}
-
-	return ranges;
-}
-
-function collectHtmlCommentRanges(markdown: string): ProtectedRange[] {
-	return collectRegexRanges(markdown, /<!--[\s\S]*?-->/g);
-}
-
-function collectSvelteTagRanges(markdown: string): ProtectedRange[] {
-	return [
-		...collectRegexRanges(markdown, /<script\b[\s\S]*?<\/script>/gi),
-		...collectRegexRanges(markdown, /<style\b[\s\S]*?<\/style>/gi)
-	];
-}
-
-function collectInlineCodeRanges(markdown: string): ProtectedRange[] {
-	const ranges: ProtectedRange[] = [];
-	let index = 0;
-
-	while (index < markdown.length) {
-		const start = markdown.indexOf('`', index);
-
-		if (start === -1) break;
-
-		const opening = countRepeated(markdown, start, '`');
-		const closing = findClosingBackticks(markdown, start + opening, opening);
-
-		if (closing === -1) {
-			index = start + opening;
-			continue;
-		}
-
-		ranges.push({ start, end: closing + opening });
-		index = closing + opening;
-	}
-
-	return ranges;
-}
-
-function collectRegexRanges(markdown: string, re: RegExp): ProtectedRange[] {
-	const ranges: ProtectedRange[] = [];
-
-	for (const match of markdown.matchAll(re)) {
-		const start = match.index ?? 0;
-		ranges.push({ start, end: start + match[0].length });
-	}
-
-	return ranges;
-}
-
-function mergeRanges(ranges: ProtectedRange[]): ProtectedRange[] {
-	const sorted = ranges
-		.filter((range) => range.end > range.start)
-		.sort((a, b) => a.start - b.start || b.end - a.end);
-	const merged: ProtectedRange[] = [];
-
-	for (const range of sorted) {
-		const previous = merged.at(-1);
-
-		if (!previous || range.start > previous.end) {
-			merged.push({ ...range });
-		} else {
-			previous.end = Math.max(previous.end, range.end);
+		if (index >= markdown.length) {
+			break;
 		}
 	}
 
-	return merged;
+	return fences;
 }
 
 function readLine(input: string, start: number): { text: string; end: number } {
@@ -418,44 +272,14 @@ function readLine(input: string, start: number): { text: string; end: number } {
 	return { text, end };
 }
 
-function countRepeated(input: string, start: number, char: string): number {
-	let count = 0;
-
-	while (input[start + count] === char) {
-		count += 1;
-	}
-
-	return count;
+function normalizeFenceContent(content: string): string {
+	return content.replace(/\r?\n$/, '');
 }
 
-function findClosingBackticks(input: string, start: number, length: number): number {
-	let index = start;
-
-	while (index < input.length) {
-		const next = input.indexOf('`', index);
-
-		if (next === -1) return -1;
-
-		const count = countRepeated(input, next, '`');
-
-		if (count === length) {
-			return next;
-		}
-
-		index = next + count;
-	}
-
-	return -1;
-}
-
-function isStandaloneMarkdownLine(chunk: string, start: number, end: number): boolean {
-	const lineStart = chunk.lastIndexOf('\n', start - 1) + 1;
-	const lineEndIndex = chunk.indexOf('\n', end);
-	const lineEnd = lineEndIndex === -1 ? chunk.length : lineEndIndex;
-	const before = chunk.slice(lineStart, start);
-	const after = chunk.slice(end, lineEnd);
-
-	return before.trim().length === 0 && after.trim().length === 0;
+function getConsumedClosingLineEnding(markdown: string, fenceEnd: number): string {
+	if (fenceEnd >= 2 && markdown.slice(fenceEnd - 2, fenceEnd) === '\r\n') return '\r\n';
+	if (fenceEnd >= 1 && markdown[fenceEnd - 1] === '\n') return '\n';
+	return '';
 }
 
 function injectComponentImports(
