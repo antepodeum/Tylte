@@ -50,7 +50,8 @@
 		class: className = ''
 	}: Props = $props();
 
-	const trimmedSource = $derived(source.trim());
+	const renderSource = $derived(inputMode === 'math' ? source.trim() : source);
+	const hasRenderableSource = $derived(source.trim().length > 0);
 	const tag = $derived(mode === 'inline' ? 'span' : 'div');
 	const resolvedOptions = $derived(
 		resolveTypstOptions({
@@ -62,10 +63,10 @@
 		})
 	);
 	const request = $derived(
-		trimmedSource
+		hasRenderableSource
 			? {
 					...resolvedOptions,
-					source: trimmedSource,
+					source: renderSource,
 					mode,
 					inputMode
 				}
@@ -138,35 +139,62 @@
 		const generation = ++renderGeneration;
 		renderedKey = key;
 
-		void renderTypstSvgResult(request, throwOnError).then(
-			(nextResult: { svg: string | undefined; error: string }) => {
+		void renderTypstSvgResult(request, throwOnError)
+			.then((nextResult: { svg: string | undefined; error: string }) => {
+				applyRenderResult(nextResult, generation);
+			})
+			.catch((err: unknown) => {
 				if (generation !== renderGeneration) return;
 
-				if (nextResult.svg) {
-					releaseRetainedServerSvg();
-					visibleSvg = nextResult.svg;
-					lastGoodSvg = nextResult.svg;
-					error = '';
-					return;
-				}
+				applyRenderResult(
+					{
+						svg: '',
+						error: formatErrorMessage(err)
+					},
+					generation
+				);
 
-				error = nextResult.error || 'Typst render failed';
-
-				if (retainedServerSvg && lastGoodSvg) {
-					// Keep the retained SSR SVG in place while showing the error badge.
-					// Setting {@html} here would insert a duplicate because Svelte does not
-					// own the retained server DOM after hydration.
-					visibleSvg = undefined;
-				} else if (lastGoodSvg) {
-					visibleSvg = lastGoodSvg;
-					retainedServerSvg = false;
-				} else {
-					visibleSvg = '';
-					retainedServerSvg = false;
+				if (throwOnError) {
+					queueMicrotask(() => {
+						throw err;
+					});
 				}
-			}
-		);
+			});
 	});
+
+	function applyRenderResult(
+		nextResult: { svg: string | undefined; error: string },
+		generation: number
+	): void {
+		if (generation !== renderGeneration) return;
+
+		if (nextResult.svg) {
+			releaseRetainedServerSvg();
+			visibleSvg = nextResult.svg;
+			lastGoodSvg = nextResult.svg;
+			error = '';
+			return;
+		}
+
+		error = nextResult.error || 'Typst render failed';
+
+		if (retainedServerSvg && lastGoodSvg) {
+			// Keep the retained SSR SVG in place while showing the error badge.
+			// Setting {@html} here would insert a duplicate because Svelte does not
+			// own the retained server DOM after hydration.
+			visibleSvg = undefined;
+		} else if (lastGoodSvg) {
+			visibleSvg = lastGoodSvg;
+			retainedServerSvg = false;
+		} else {
+			visibleSvg = '';
+			retainedServerSvg = false;
+		}
+	}
+
+	function formatErrorMessage(err: unknown): string {
+		return err instanceof Error ? err.message : String(err);
+	}
 
 	async function renderInitialServerState(): Promise<InitialServerRenderState> {
 		if (isBrowser) {

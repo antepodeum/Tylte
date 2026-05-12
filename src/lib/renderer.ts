@@ -42,10 +42,17 @@ export async function renderTypstSvg(options: TypstRenderRequest): Promise<strin
 		return withTypstRuntimeGuards(() => typst.svg({ mainContent }));
 	};
 
-	const rawSvgPromise = options.cache ? (svgCache.get(cacheKey) ?? compile()) : compile();
+	let rawSvgPromise = options.cache ? svgCache.get(cacheKey) : undefined;
 
-	if (options.cache && !svgCache.has(cacheKey)) {
-		remember(cacheKey, rawSvgPromise);
+	if (!rawSvgPromise) {
+		rawSvgPromise = compile();
+
+		if (options.cache) {
+			remember(cacheKey, rawSvgPromise);
+			rawSvgPromise.catch(() => {
+				svgCache.delete(cacheKey);
+			});
+		}
 	}
 
 	const rawSvg = await rawSvgPromise;

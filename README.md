@@ -1,8 +1,23 @@
 # Tylte
 
-Svelte 5 components and Markdown helpers for rendering Typst math and raw Typst as SVG.
+Svelte 5 components and Markdown helpers for rendering Typst math or raw Typst markup as SVG.
 
-Tylte is SSR-first when possible, keeps the rendered SVG interactive after hydration, and only loads the browser Typst WASM compiler when a formula actually needs to be re-rendered on the client.
+## Requirements
+
+- Svelte `>= 5.36`
+- Svelte async rendering enabled with `compilerOptions.experimental.async = true`
+- Vite/SvelteKit-compatible asset handling for browser WASM imports
+
+```js
+// svelte.config.js
+export default {
+	compilerOptions: {
+		experimental: {
+			async: true
+		}
+	}
+};
+```
 
 ## Install
 
@@ -10,7 +25,7 @@ Tylte is SSR-first when possible, keeps the rendered SVG interactive after hydra
 pnpm add tylte
 ```
 
-## Basic usage
+## Svelte usage
 
 ```svelte
 <script lang="ts">
@@ -24,98 +39,69 @@ pnpm add tylte
 <TypstBlock source="sum_(i=1)^n i = (n(n+1)) / 2" />
 ```
 
-By default, `source` is interpreted as Typst math syntax. Do not include `$...$` yourself in math mode.
+`source` is Typst math by default. Do not include `$...$` in math mode.
 
 ## Raw Typst
 
-Use `inputMode="raw"` when `source` is a full Typst fragment instead of only a formula body.
+Use `inputMode="raw"` when `source` is a Typst markup fragment that should not be wrapped as math.
 
 ```svelte
 <TypstBlock inputMode="raw" source={'#rect(radius: 6pt, inset: 10pt)[#strong[Raw Typst]]'} />
 ```
 
-Difference:
-
-```txt
-inputMode="math"
-  source = formula body
-  Tylte wraps it as Typst math
-
-inputMode="raw"
-  source = Typst markup as-is
-  Tylte does not wrap it
-```
-
-Examples:
-
 ```svelte
-<!-- math mode -->
+<!-- math mode: Tylte wraps source in Typst math -->
 <TypstInline source="alpha + beta" />
 
-<!-- raw mode -->
+<!-- raw mode: Tylte passes source to Typst unchanged -->
 <TypstInline inputMode="raw" source={'$alpha + beta$'} />
 ```
 
+`inputMode="markup"` is accepted as a compatibility alias for `raw`.
+
 ## Props
 
-`Typst`, `TypstInline`, and `TypstBlock` support:
+`Typst`, `TypstInline`, and `TypstBlock` support these common props:
 
 ```ts
 type TypstMode = 'inline' | 'block';
 type TypstInputMode = 'math' | 'raw' | 'markup';
-```
 
-`markup` is kept as a compatibility alias for `raw`.
+type TypstSvgSanitizer = (svg: string) => string;
 
-Common props:
-
-```ts
 source?: string;
 inputMode?: TypstInputMode;
 preamble?: string;
 textSize?: string;
 pageMargin?: string;
 cache?: boolean;
-sanitize?: (svg: string) => string;
+sanitize?: TypstSvgSanitizer;
 ariaLabel?: string;
 title?: string;
 loadingLabel?: string;
 throwOnError?: boolean;
+errorMode?: 'badge' | 'none';
 class?: string;
 ```
 
-`Typst` also accepts `mode`. `TypstInline` and `TypstBlock` set it for you.
+`Typst` also accepts `mode`. `TypstInline` and `TypstBlock` set `mode` automatically.
 
-## SSR and lazy WASM
+## SSR and browser WASM
 
-For component-level SSR, enable Svelte async rendering:
+During SSR/build, Tylte renders SVG on the server. After hydration, the browser keeps the server-rendered SVG and loads the Typst WASM runtime only when the formula has to be rendered again on the client.
 
-```js
-// svelte.config.js
-export default {
-	compilerOptions: {
-		experimental: {
-			async: true
-		}
-	}
-};
-```
-
-During SSR/build, Tylte tries to render SVG on the server. After hydration, the browser keeps the SSR SVG and does not load the Typst WASM compiler immediately.
-
-The browser compiler and renderer WASM files are bundled automatically through Vite asset imports. Consumers do not need to copy WASM files manually.
-
-The browser Typst runtime is loaded only when the component has to re-render after a client-side change to `source`, `inputMode`, `preamble`, `textSize`, `pageMargin`, or related render options.
+The browser compiler and renderer WASM files are imported as Vite assets. Consumers do not need to copy WASM files manually.
 
 ## Error behavior
 
-When rendering fails, avoid replacing the whole formula area with a large error dump. Prefer keeping the last successful SVG visible and showing only a small error indicator in UI code.
-
-Use `throwOnError={true}` only when you want render failures to propagate to the caller.
+By default, render failures keep the last successful SVG visible and show a small error badge.
 
 ```svelte
-<TypstBlock source={formula} throwOnError={false} />
+<TypstBlock source={formula} errorMode="badge" />
+<TypstBlock source={formula} errorMode="none" />
 ```
+
+Use `throwOnError={true}` when server-side render failures should fail the request/build instead of being converted to component state.
 
 ## Server helper
 
@@ -135,40 +121,24 @@ const svg = await renderTypstSvgServer({
 
 ## Markdown shortcodes
 
-Tylte uses explicit `{{...}}` shortcodes for Markdown. Ordinary Typst code fences are left alone, so users can still write and display Typst source code.
+Tylte uses explicit `{{...}}` shortcodes. Typst code fences remain source code and are not rendered.
 
 ```md
-{{ math-block }}
 {{math-inline}}
 
-{{~ raw-block ~}}
+{{ math-block }}
+
 {{~raw-inline~}}
+
+{{~ raw-block ~}}
 ```
 
-Rules:
-
-```txt
-{{ expr }}
-  math block
-
-{{expr}}
-  math inline
-
-{{~ expr ~}}
-  raw Typst block
-
-{{~expr~}}
-  raw Typst inline
-```
-
-The whitespace is meaningful:
+Block shortcodes must be the only non-whitespace content on their Markdown line. A spaced shortcode embedded inside a paragraph is rendered inline to avoid invalid Markdown/HTML nesting.
 
 ```md
-{{ alpha + beta }} <!-- block math -->
-{{alpha + beta}} <!-- inline math -->
+The value is {{ alpha + beta }} here.
 
-{{~ #rect[hello] ~}} <!-- block raw Typst -->
-{{~#strong[hello]~}} <!-- inline raw Typst -->
+{{ alpha + beta }}
 ```
 
 To write the shortcode literally, escape the opening braces:
@@ -177,20 +147,14 @@ To write the shortcode literally, escape the opening braces:
 \{{alpha + beta}}
 ```
 
-## Typst source code in Markdown
-
-A normal Typst fence remains source code:
+Shortcodes are not processed inside fenced code, indented code, inline code spans, HTML comments, `<script>` blocks, or `<style>` blocks.
 
 ````md
 ```typst
-#let x = 1
+{{alpha + beta}}
 #rect[in source code]
 ```
 ````
-
-Tylte does not render that fence automatically.
-
-This avoids stealing the `typst` language name from code highlighters and Markdown renderers.
 
 ## Markdown transform
 
@@ -202,7 +166,7 @@ const output = await transformTylteMarkdown(markdown, {
 });
 ```
 
-Available output modes:
+Output modes:
 
 ```ts
 type TylteMarkdownOutput = 'component' | 'html' | 'markdown-image' | 'asset';
@@ -218,14 +182,12 @@ await transformTylteMarkdown(markdown, {
 });
 ```
 
-Produces Svelte component tags such as:
+Produces Svelte component tags:
 
 ```svelte
-<TypstInline source={'alpha + beta'} />
-<TypstBlock source={'#rect[hello]'} inputMode="raw" />
+<TypstInline source={"alpha + beta"} />
+<TypstBlock source={"#rect[hello]"} inputMode="raw" />
 ```
-
-The components stay SSR-first and can still re-render on the client when props change.
 
 ### HTML output
 
@@ -237,9 +199,7 @@ await transformTylteMarkdown(markdown, {
 });
 ```
 
-This renders SVG immediately and injects it into the Markdown output.
-
-Do not use this mode with Markdown renderers that strip or ignore raw HTML.
+This renders SVG immediately and inserts it into the Markdown output.
 
 ### Markdown image output
 
@@ -269,27 +229,57 @@ This writes SVG files to `assetDir` and inserts normal Markdown image links.
 
 ## MDsveX preprocessor
 
-```ts
+Run the Tylte preprocessor before MDsveX so Markdown shortcodes are converted to Svelte component tags before MDsveX compiles the document.
+
+```js
+// svelte.config.js
+import adapter from '@sveltejs/adapter-auto';
+import { mdsvex } from 'mdsvex';
 import { createTypstMdsvexPreprocessor } from 'tylte/markdown';
 
-const typst = createTypstMdsvexPreprocessor({
-	output: 'component'
-});
+const config = {
+	extensions: ['.svelte', '.svx', '.md'],
+	preprocess: [
+		createTypstMdsvexPreprocessor({
+			output: 'component'
+		}),
+		mdsvex({
+			extensions: ['.svx', '.md']
+		})
+	],
+	compilerOptions: {
+		experimental: {
+			async: true
+		}
+	},
+	kit: {
+		adapter: adapter()
+	}
+};
+
+export default config;
 ```
 
-Then make `TypstInline` and `TypstBlock` available to the rendered MDsveX content, for example in a layout or wrapper component:
+For `output: 'component'`, the preprocessor injects this import when a document contains Tylte shortcodes:
 
 ```svelte
 <script lang="ts">
 	import { TypstInline, TypstBlock } from 'tylte';
 </script>
+```
 
-<slot />
+Disable injection only if another MDsveX hook already imports the components:
+
+```ts
+createTypstMdsvexPreprocessor({
+	output: 'component',
+	injectComponentImports: false
+});
 ```
 
 ## Rendering options for Markdown
 
-Markdown helpers accept the same render options as components/server rendering:
+Markdown helpers accept the same render options as component/server rendering:
 
 ```ts
 await transformTylteMarkdown(markdown, {
@@ -323,24 +313,9 @@ import { createServerDomPurifySvgSanitizer } from 'tylte/server/dompurify';
 const sanitize = await createServerDomPurifySvgSanitizer();
 ```
 
-## Escaping and limitations
+## Limitations
 
-Shortcodes are not processed inside fenced code blocks.
-
-````md
-```md
-{{alpha + beta}}
-{{~ #rect[hello] ~}}
-```
-````
-
-````
-
-For multiline Typst, use block forms:
-
-```md
-{{~
-#set text(size: 12pt)
-#rect(inset: 8pt)[hello]
-~}}
-````
+- Component SSR depends on Svelte experimental async rendering.
+- Markdown shortcodes intentionally do not reuse the `typst` code-fence language; fences are preserved for syntax highlighting and source examples.
+- Server rendering temporarily guards Typst runtime fetches so SvelteKit does not track external runtime fetches during SSR.
+- `html`, `markdown-image`, and `asset` output modes pre-render SVG immediately and are not reactive on the client.
