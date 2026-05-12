@@ -3,24 +3,25 @@
 
   let inlineSource = $state('integral_0^1 x^2 dif x');
   let blockSource = $state('sum_(i=1)^n i = (n(n+1)) / 2');
+  let rawSource = $state('#rect(radius: 6pt, inset: 10pt)[#strong[Raw Typst] block]');
   let textSize = $state('11pt');
 </script>
 
 <svelte:head>
-  <title>typst-svelte demo</title>
+  <title>Tylte demo</title>
   <meta
     name="description"
-    content="Svelte 5 components for rendering Typst inline and block formulas."
+    content="Svelte 5 components for rendering Typst inline, block and raw Typst as SVG."
   />
 </svelte:head>
 
 <main class="page">
   <section class="hero">
-    <p class="eyebrow">typst-svelte</p>
+    <p class="eyebrow">Tylte</p>
     <h1>Svelte 5 components for Typst formulas</h1>
     <p class="lead">
-      Render Typst math as inline or block SVG. The Typst compiler and renderer
-      are loaded from bundled WASM assets, so there is no setup step for consumers.
+      Render Typst math and raw Typst as SVG. Components try SSR first and keep working
+      interactively in the browser after hydration.
     </p>
   </section>
 
@@ -60,6 +61,18 @@
     </label>
   </section>
 
+  <section class="card">
+    <div class="card-heading">
+      <h2>Raw Typst</h2>
+      <TypstBlock source={rawSource} inputMode="raw" {textSize} />
+    </div>
+
+    <label>
+      Raw Typst source
+      <textarea bind:value={rawSource} spellcheck="false"></textarea>
+    </label>
+  </section>
+
   <section class="card compact">
     <h2>Per-component options</h2>
     <label>
@@ -73,7 +86,8 @@
     </label>
 
     <pre>{`<TypstInline source="${inlineSource}" textSize="${textSize}" />
-<TypstBlock source="${blockSource}" textSize="${textSize}" />`}</pre>
+<TypstBlock source="${blockSource}" textSize="${textSize}" />
+<TypstBlock source="${rawSource}" inputMode="raw" textSize="${textSize}" />`}</pre>
   </section>
 </main>
 
@@ -200,12 +214,7 @@
   }
 
   pre {
-    overflow-x: auto;
-    margin: 0;
-    padding: 16px;
-    border-radius: 16px;
-    background: #191714;
-    color: #f8f1df;
-    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 </style>

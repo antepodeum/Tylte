@@ -1,10 +1,17 @@
 import type { TypstInputMode, TypstMode, TypstResolvedRendererOptions } from './config';
-import { TYPST_COMPILER_ASSET, TYPST_RENDERER_ASSET } from './wasm';
+import { createTypstDocument } from './document';
+import { hashCacheKey } from './hash';
 
 export interface TypstRenderRequest extends TypstResolvedRendererOptions {
   source: string;
   mode: TypstMode;
   inputMode: TypstInputMode;
+}
+
+export interface TypstRenderResult {
+  svg: string;
+  error: string;
+  ssrFailed: boolean;
 }
 
 interface TypstApi {
@@ -14,32 +21,16 @@ interface TypstApi {
 }
 
 let typstPromise: Promise<TypstApi> | null = null;
+let browserWasmConfigured = false;
 
 const svgCache = new Map<string, Promise<string>>();
 const MAX_CACHE_SIZE = 300;
 
-export function createTypstDocument(options: TypstRenderRequest): string {
-  const setup = [
-    `#set page(width: auto, height: auto, margin: ${options.pageMargin}, fill: none)`,
-    `#set text(size: ${options.textSize})`
-  ];
-
-  if (options.mode === 'inline') {
-    setup.push('#show math.equation: set text(top-edge: "bounds", bottom-edge: "bounds")');
-  }
-
-  const body = options.inputMode === 'markup'
-    ? options.source
-    : createMathBody(options.source, options.mode);
-
-  return [setup.join('\n'), options.preamble, body]
-    .filter((part) => part.trim().length > 0)
-    .join('\n\n');
-}
+export { createTypstDocument } from './document';
 
 export async function renderTypstSvg(options: TypstRenderRequest): Promise<string> {
   const mainContent = createTypstDocument(options);
-  const cacheKey = JSON.stringify({ mainContent });
+  const cacheKey = hashCacheKey(mainContent);
 
   const compile = async () => {
     const typst = await getTypst();
@@ -56,16 +47,34 @@ export async function renderTypstSvg(options: TypstRenderRequest): Promise<strin
   return options.sanitize ? options.sanitize(rawSvg) : rawSvg;
 }
 
-export function clearTypstSvgCache(): void {
-  svgCache.clear();
+export async function renderTypstSvgResult(
+  options: TypstRenderRequest,
+  throwOnError = false
+): Promise<TypstRenderResult> {
+  try {
+    return {
+      svg: await renderTypstSvg(options),
+      error: '',
+      ssrFailed: false
+    };
+  } catch (err) {
+    if (throwOnError) {
+      throw err;
+    }
+
+    const message = err instanceof Error ? err.message : String(err);
+    const ssrFailed = typeof window === 'undefined';
+
+    return {
+      svg: '',
+      error: ssrFailed ? '' : message,
+      ssrFailed
+    };
+  }
 }
 
-function createMathBody(source: string, mode: TypstMode): string {
-  if (mode === 'inline') {
-    return `#box[$${source}$]`;
-  }
-
-  return `#align(center)[$ ${source} $]`;
+export function clearTypstSvgCache(): void {
+  svgCache.clear();
 }
 
 function remember(key: string, value: Promise<string>): void {
@@ -79,20 +88,24 @@ function remember(key: string, value: Promise<string>): void {
 
 async function getTypst(): Promise<TypstApi> {
   if (!typstPromise) {
-    typstPromise = import('@myriaddreamin/typst.ts').then(({ $typst }) => {
-      const typst = $typst as TypstApi;
-
-      typst.setCompilerInitOptions?.({
-        getModule: () => TYPST_COMPILER_ASSET
-      });
-
-      typst.setRendererInitOptions?.({
-        getModule: () => TYPST_RENDERER_ASSET
-      });
-
-      return typst;
-    });
+    typstPromise = import('@myriaddreamin/typst.ts').then(({ $typst }) => $typst as TypstApi);
   }
 
-  return typstPromise;
+  const typst = await typstPromise;
+
+  if (typeof window !== 'undefined' && !browserWasmConfigured) {
+    const { TYPST_COMPILER_ASSET, TYPST_RENDERER_ASSET } = await import('./wasm');
+
+    typst.setCompilerInitOptions?.({
+      getModule: () => TYPST_COMPILER_ASSET
+    });
+
+    typst.setRendererInitOptions?.({
+      getModule: () => TYPST_RENDERER_ASSET
+    });
+
+    browserWasmConfigured = true;
+  }
+
+  return typst;
 }

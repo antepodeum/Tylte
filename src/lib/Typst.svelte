@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import {
     resolveTypstOptions,
     type TypstInputMode,
     type TypstMode,
     type TypstSvgSanitizer
   } from './config';
-  import { renderTypstSvg } from './renderer';
+  import { renderTypstSvgResult } from './renderer';
 
   interface Props {
     source?: string;
@@ -40,14 +39,9 @@
     class: className = ''
   }: Props = $props();
 
-  let svg = $state('');
-  let error = $state('');
-  let pending = $state(false);
-  let mounted = $state(false);
-  let renderSeq = 0;
-
-  let tag = $derived(mode === 'inline' ? 'span' : 'div');
-  let resolvedOptions = $derived(
+  const trimmedSource = $derived(source.trim());
+  const tag = $derived(mode === 'inline' ? 'span' : 'div');
+  const resolvedOptions = $derived(
     resolveTypstOptions({
       preamble,
       textSize,
@@ -57,68 +51,19 @@
     })
   );
 
-  onMount(() => {
-    mounted = true;
-
-    return () => {
-      renderSeq += 1;
-    };
-  });
-
-  $effect(() => {
-    if (!mounted) return;
-
-    source;
-    mode;
-    inputMode;
-    resolvedOptions;
-
-    void render();
-  });
-
-  async function render() {
-    const currentSeq = ++renderSeq;
-    const trimmedSource = source.trim();
-
-    if (!trimmedSource) {
-      svg = '';
-      error = '';
-      pending = false;
-      return;
-    }
-
-    pending = true;
-    error = '';
-
-    try {
-      const nextSvg = await renderTypstSvg({
-        ...resolvedOptions,
-        source: trimmedSource,
-        mode,
-        inputMode
-      });
-
-      if (currentSeq === renderSeq) {
-        svg = nextSvg;
-        error = '';
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      if (currentSeq === renderSeq) {
-        svg = '';
-        error = message;
-      }
-
-      if (throwOnError) {
-        throw err;
-      }
-    } finally {
-      if (currentSeq === renderSeq) {
-        pending = false;
-      }
-    }
-  }
+  const result = $derived(
+    trimmedSource
+      ? await renderTypstSvgResult(
+          {
+            ...resolvedOptions,
+            source: trimmedSource,
+            mode,
+            inputMode
+          },
+          throwOnError
+        )
+      : { svg: '', error: '', ssrFailed: false }
+  );
 </script>
 
 <svelte:element
@@ -126,15 +71,14 @@
   class={`typst typst-${mode} ${className}`}
   role={ariaLabel ? 'img' : undefined}
   aria-label={ariaLabel}
-  aria-busy={pending ? 'true' : undefined}
   title={title}
-  data-pending={pending ? 'true' : undefined}
-  data-error={error || undefined}
+  data-error={result.error || undefined}
+  data-ssr-failed={result.ssrFailed ? 'true' : undefined}
 >
-  {#if svg}
-    {@html svg}
-  {:else if error}
-    <span class="typst-error">{error}</span>
+  {#if result.svg}
+    {@html result.svg}
+  {:else if result.error}
+    <span class="typst-error">{result.error}</span>
   {:else}
     <span class="typst-placeholder" aria-label={loadingLabel}></span>
   {/if}

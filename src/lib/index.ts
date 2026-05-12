@@ -4,14 +4,18 @@ export { default as TypstBlock } from './TypstBlock.svelte';
 
 export {
   DEFAULT_TYPST_OPTIONS,
+  normalizeTypstInputMode,
   resolveTypstOptions
 } from './config';
 
 export {
   clearTypstSvgCache,
   createTypstDocument,
-  renderTypstSvg
+  renderTypstSvg,
+  renderTypstSvgResult
 } from './renderer';
+
+export { hashCacheKey } from './hash';
 
 export type {
   TypstInputMode,
@@ -21,4 +25,4 @@ export type {
   TypstSvgSanitizer
 } from './config';
 
-export type { TypstRenderRequest } from './renderer';
+export type { TypstRenderRequest, TypstRenderResult } from './renderer';

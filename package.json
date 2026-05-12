@@ -1,6 +1,6 @@
 {
 	"name": "tylte",
-	"version": "0.0.1",
+	"version": "0.2.2",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -27,6 +27,22 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"svelte": "./dist/index.js"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"default": "./dist/server.js"
+		},
+		"./markdown": {
+			"types": "./dist/markdown.d.ts",
+			"default": "./dist/markdown.js"
+		},
+		"./sanitizers/dompurify": {
+			"types": "./dist/sanitizers/dompurify.d.ts",
+			"default": "./dist/sanitizers/dompurify.js"
+		},
+		"./server/dompurify": {
+			"types": "./dist/server/dompurify.d.ts",
+			"default": "./dist/server/dompurify.js"
 		}
 	},
 	"dependencies": {
@@ -35,7 +51,9 @@
 		"@myriaddreamin/typst-ts-web-compiler": "0.7.0-rc2"
 	},
 	"peerDependencies": {
-		"svelte": "^5.0.0"
+		"svelte": "^5.36.0",
+		"dompurify": "^3.0.0",
+		"jsdom": "^27.0.0"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
@@ -56,9 +74,19 @@
 		"svelte-check": "^4.4.6",
 		"typescript": "^6.0.2",
 		"typescript-eslint": "^8.58.1",
-		"vite": "^8.0.7"
+		"vite": "^8.0.7",
+		"dompurify": "^3.3.1",
+		"jsdom": "^27.0.1"
 	},
 	"keywords": [
 		"svelte"
-	]
+	],
+	"peerDependenciesMeta": {
+		"dompurify": {
+			"optional": true
+		},
+		"jsdom": {
+			"optional": true
+		}
+	}
 }

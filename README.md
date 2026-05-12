@@ -1,65 +1,131 @@
-# Svelte library
+# Tylte
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+Svelte 5 components for rendering Typst math and raw Typst as SVG.
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
+## Install
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+```bash
+pnpm add tylte
 ```
 
-To recreate this project with the same configuration:
+## Usage
 
-```sh
-# recreate this project
-pnpm dlx sv@0.15.3 create --template library --types ts --add prettier eslint --install pnpm .
+```svelte
+<script lang="ts">
+	import { TypstInline, TypstBlock } from 'tylte';
+</script>
+
+<p>
+	Inline: <TypstInline source="integral_0^1 x^2 dif x" />
+</p>
+
+<TypstBlock source="sum_(i=1)^n i = (n(n+1)) / 2" />
+
+<TypstBlock inputMode="raw" source={'#rect(radius: 6pt, inset: 10pt)[#strong[Raw Typst]]'} />
 ```
 
-## Developing
+## SSR
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Components are SSR-first when Svelte async rendering is enabled.
 
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```js
+// svelte.config.js
+export default {
+	compilerOptions: {
+		experimental: {
+			async: true
+		}
+	}
+};
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+During SSR/build, Tylte uses `@myriaddreamin/typst.ts` without the native
+`@myriaddreamin/typst-ts-node-compiler` package. This avoids `.node` binary crashes in
+Vite/Rolldown and Node 24. If SSR rendering fails, the component falls back to browser
+rendering after hydration instead of crashing the dev server.
 
-## Building
+In the browser, the Typst compiler and renderer WASM files are bundled automatically via
+Vite asset imports. Consumers do not need to copy WASM files manually.
 
-To build your library:
+## Props
 
-```sh
-npm pack
+`Typst`, `TypstInline` and `TypstBlock` support:
+
+```ts
+type TypstInputMode = 'math' | 'raw' | 'markup';
+type TypstMode = 'inline' | 'block';
 ```
 
-To create a production version of your showcase app:
+`markup` is kept as an alias for `raw`.
 
-```sh
-npm run build
+Common props:
+
+```ts
+source?: string;
+inputMode?: TypstInputMode;
+preamble?: string;
+textSize?: string;
+pageMargin?: string;
+cache?: boolean;
+sanitize?: (svg: string) => string;
+ariaLabel?: string;
+title?: string;
+throwOnError?: boolean;
+class?: string;
 ```
 
-You can preview the production build with `npm run preview`.
+## Server helpers
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+```ts
+import { renderTypstSvgServer } from 'tylte/server';
 
-## Publishing
+const svg = await renderTypstSvgServer({
+	source: 'integral_0^1 x^2 dif x',
+	mode: 'block',
+	inputMode: 'math',
+	preamble: '',
+	textSize: '11pt',
+	pageMargin: '0pt',
+	cache: true
+});
+```
 
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
+## Markdown / MDsveX helper
 
-To publish your library to [npm](https://www.npmjs.com):
+```ts
+import { preRenderTypstMarkdown } from 'tylte/markdown';
 
-```sh
-npm publish
+const htmlLikeMarkdown = await preRenderTypstMarkdown(markdown);
+```
+
+Supported markers:
+
+````md
+{{typst alpha + beta}}
+
+```typst-math
+sum_(i=1)^n i = (n(n+1)) / 2
+```
+
+```typst
+#rect(inset: 8pt)[Raw Typst]
+```
+````
+
+## Sanitizing
+
+DOMPurify is optional:
+
+```ts
+import { createDomPurifySvgSanitizer } from 'tylte/sanitizers/dompurify';
+
+const sanitize = await createDomPurifySvgSanitizer();
+```
+
+Server-side DOMPurify requires both `dompurify` and `jsdom`:
+
+```ts
+import { createServerDomPurifySvgSanitizer } from 'tylte/server/dompurify';
+
+const sanitize = await createServerDomPurifySvgSanitizer();
 ```

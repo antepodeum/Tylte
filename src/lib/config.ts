@@ -1,5 +1,5 @@
 export type TypstMode = 'inline' | 'block';
-export type TypstInputMode = 'math' | 'markup';
+export type TypstInputMode = 'math' | 'raw' | 'markup';
 
 export type TypstSvgSanitizer = (svg: string) => string;
 
@@ -36,4 +36,8 @@ export function resolveTypstOptions(
     cache: options.cache ?? DEFAULT_TYPST_OPTIONS.cache,
     sanitize: options.sanitize
   };
+}
+
+export function normalizeTypstInputMode(inputMode: TypstInputMode): 'math' | 'raw' {
+  return inputMode === 'math' ? 'math' : 'raw';
 }
